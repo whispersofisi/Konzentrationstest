@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SART (Deutsch) – Online</title>
+
+    <!-- jsPsych core + CSS (via CDN) -->
+    <script src="https://unpkg.com/jspsych@8.2.2"></script>
+    <link href="https://unpkg.com/jspsych@8.2.2/css/jspsych.css" rel="stylesheet" type="text/css" />
+
+    <!-- Plugins (via CDN) -->
+    <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@2.1.0"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-survey-html-form@2.1.0"></script>
+
+    <style>
+      .stim-digit {
+        font-size: 220px;
+        font-weight: 600;
+      }
+      .small {
+        font-size: 14px;
+        opacity: 0.85;
+      }
+      .box {
+        max-width: 860px;
+        margin: 0 auto;
+        line-height: 1.45;
+      }
+      button {
+        cursor: pointer;
+      }
+    </style>
+  </head>
+
+  <body></body>
+
+  <script>
+    /***********************
+     * Parameter (Standard)
+     ***********************/
+    const NOGO_DIGIT = 3;
+
+    // Timing: 250 ms Stimulus + 900 ms rest = 1150 ms Trialdauer
+    const STIMULUS_DURATION_MS = 250;
+    const TRIAL_DURATION_MS = 1150;
+
+    // Trials: 9 Ziffern * 20 Wiederholungen = 180 Trials
+    const DIGITS = [1,2,3,4,5,6,7,8,9];
+    const REPS_PER_DIGIT = 20;
+
+    // Practice: kurz (18 Trials)
+    const PRACTICE_REPS_PER_DIGIT = 2;
+
+    /***********************
+     * Hilfsfunktionen
+     ***********************/
+    function makeTrialSequence(repsPerDigit) {
+      const seq = jsPsych.randomization.repeat(DIGITS, repsPerDigit);
+      return jsPsych.randomization.shuffle(seq);
+    }
+
+    function computeCorrect(data) {
+      const isNoGo = data.is_nogo;
+      const responded = data.response !== null;
+
+      // NoGo korrekt: NICHT drücken
+      if (isNoGo) return responded ? 0 : 1;
+
+      // Go korrekt: drücken
+      return responded ? 1 : 0;
+    }
+
+    /***********************
+     * jsPsych init
+     ***********************/
+    const jsPsych = initJsPsych({});
+
+    /***********************
+     * Teilnehmer-Code (für Dateiname)
+     ***********************/
+    const participantForm = {
+      type: jsPsychSurveyHtmlForm,
+      preamble: `<div class="box">
+        <h2>Herzlich Willkommen zum Konzentrationstest von Isaros Maturaarbeit</h2>
+        <p class="small">
+          Bitte verwende für den Test einen Laptop/PC (kein Smartphone/Tablet).
+          Der Test dauert ca. 4 Minuten.
+        </p>
+        <p><b>Aufgabe:</b> Drücke im Test die <b>Leertaste</b> bei jeder Zahl – <b>ausser</b> bei der Zahl <b>${NOGO_DIGIT}</b>.</p>
+      </div>`,
+      html: `
+        <div class="box">
+          <p>Bitte gib einen Spitznamen ein (kein Name, da die Daten anonymisiert werden).</p>
+          <p><input name="pid" type="text" required placeholder="z.B. Muster123"
+             style="font-size:16px; padding:6px; width:180px;" /></p>
+          <p class="small">Dieser Spitzname wird nur für den Dateinamen beim Download verwendet.</p>
+        </div>
+      `,
+      button_label: "Weiter"
+    };
+
+    const setPid = {
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: `<div class="box"><p>Lade…</p></div>`,
+      choices: "NO_KEYS",
+      trial_duration: 10,
+      on_start: function () {
+        const last = jsPsych.data.get().last(1).values()[0];
+        const pid = (last && last.response && last.response.pid)
+          ? String(last.response.pid).trim()
+          : "PXX";
+        jsPsych.data.addProperties({ pid });
+      }
+    };
+
+    /***********************
+     * Instruktionen
+     ***********************/
+    const instructions = {
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: `
+        <div class="box">
+          <h3>Anleitung</h3>
+          <p>Du siehst gleich viele einzelne Zahlen (1–9).</p>
+          <ul>
+            <li>Drücke bei <b>jeder</b> Zahl so schnell wie möglich die <b>Leertaste</b></li>
+            <li><b>Ausser</b> wenn die Zahl <b>${NOGO_DIGIT}</b> erscheint: dann <b>nicht</b> drücken.</li>
+          </ul>
+          <p>Versuche, <b>schnell</b> und <b>genau</b> zu sein.</p>
+          <p>Zum Start der Übung: drücke eine beliebige Taste.</p>
+          <p>Wir starten zuerst mit einem kurzen Übungsdurchgang.</p>
+        </div>
+      `
+    };
+
+    /***********************
+     * Practice Block
+     ***********************/
+    const practiceDigits = makeTrialSequence(PRACTICE_REPS_PER_DIGIT);
+
+    const practiceTrials = practiceDigits.map((d) => ({
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: `<div class="stim-digit">${d}</div>`,
+      choices: [" "], // Leertaste
+      response_ends_trial: false,
+      stimulus_duration: STIMULUS_DURATION_MS,
+      trial_duration: TRIAL_DURATION_MS,
+      data: {
+        task: "SART_practice",
+        digit: d,
+        is_nogo: d === NOGO_DIGIT ? 1 : 0
+      },
+      on_finish: (data) => {
+        data.correct = computeCorrect(data);
+      }
+    }));
+
+    const practiceEnd = {
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: `
+        <div class="box">
+          <h3>Übung fertig</h3>
+          <p>Jetzt beginnt der Hauptteil.</p>
+          <p class="small">Drücke eine Taste, um zu starten.</p>
+        </div>
+      `
+    };
+
+    /***********************
+     * Main SART Block (135 Trials)
+     ***********************/
+    const mainDigits = makeTrialSequence(REPS_PER_DIGIT);
+
+    const mainTrials = mainDigits.map((d) => ({
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: `<div class="stim-digit">${d}</div>`,
+      choices: [" "],
+      response_ends_trial: false,
+      stimulus_duration: STIMULUS_DURATION_MS,
+      trial_duration: TRIAL_DURATION_MS,
+      data: {
+        task: "SART_main",
+        digit: d,
+        is_nogo: d === NOGO_DIGIT ? 1 : 0
+      },
+      on_finish: (data) => {
+        data.correct = computeCorrect(data);
+      }
+    }));
+
+    /***********************
+     * Abschluss + Summary CSV Download
+     ***********************/
+    const endScreen = {
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: () => {
+        const d = jsPsych.data.get().filter({ task: "SART_main" });
+
+        const totalTrials = d.count();
+        const correctTrials = d.filter({ correct: 1 }).count();
+        const accuracy = totalTrials > 0 ? correctTrials / totalTrials : 0;
+        const comm = d
+          .filter({ is_nogo: 1 })
+          .filterCustom(t => t.response !== null)
+          .count();
+
+        const omissions = d
+          .filter({ is_nogo: 0 })
+          .filterCustom(t => t.response === null)
+          .count();
+
+        // RTs nur für korrekte GO-Trials (is_nogo=0, correct=1, rt != null)
+        const rtRows = d
+          .filter({ is_nogo: 0, correct: 1 })
+          .filterCustom(t => t.rt !== null)
+          .values()
+          .map(t => t.rt);
+
+        const nRT = rtRows.length;
+        const meanRT = nRT > 0 ? rtRows.reduce((a,b)=>a+b,0) / nRT : NaN;
+        const sdRT = nRT > 1
+          ? Math.sqrt(rtRows.reduce((a,b)=>a + Math.pow(b - meanRT, 2), 0) / (nRT - 1))
+          : NaN;
+
+        return `
+          <div class="box">
+            <h2>Der Test ist abgeschlossen – Danke vielmals!</h2>
+            <p><b>Ergebnisse (Hauptteil):</b></p>
+            <ul>
+              <li>Anzahl Trials: ${totalTrials}</li>
+              <li>Genauigkeit: <b>${(accuracy * 100).toFixed(1)}%</b></li>
+              <li>Fehler 1 (bei ${NOGO_DIGIT} gedrückt): <b>${comm}</b></li>
+              <li>Fehler 2 (zu spät gedrückt bei anderen Zahlen): <b>${omissions}</b></li>
+              <li>Mittlere Reaktionszeit: <b>${Number.isFinite(meanRT) ? meanRT.toFixed(1) + " ms" : "n/a"}</b></li>
+            </ul>
+            <p><b>Bitte übertrage die fettgedruckten Werte ins Google Forms ein.</b></p>
+            <p><b>Im Anschluss, klicke auf <i>„Daten herunterladen“</i> und lade die Datei auf Google Forms hoch.</b></p>
+            <button id="dl" style="font-size:16px; padding:10px 14px;">
+              Daten herunterladen (CSV)
+            </button>
+            <p class="small">Du kannst danach das Browserfenster schließen.</p>
+          </div>
+        `;
+      },
+      choices: "NO_KEYS",
+      on_load: () => {
+        document.getElementById("dl").addEventListener("click", () => {
+          const pid = jsPsych.data.get().values()[0]?.pid || "PXX";
+
+          const d = jsPsych.data.get().filter({ task: "SART_main" });
+
+          const totalTrials = d.count();
+          const correctTrials = d.filter({ correct: 1 }).count();
+          const accuracy = totalTrials > 0 ? correctTrials / totalTrials : 0;
+
+          const comm = d
+            .filter({ is_nogo: 1 })
+            .filterCustom(t => t.response !== null)
+            .count();
+
+          const omissions = d
+            .filter({ is_nogo: 0 })
+            .filterCustom(t => t.response === null)
+            .count();
+
+          const rtRows = d
+            .filter({ is_nogo: 0, correct: 1 })
+            .filterCustom(t => t.rt !== null)
+            .values()
+            .map(t => t.rt);
+
+          const nRT = rtRows.length;
+          const meanRT = nRT > 0 ? rtRows.reduce((a,b)=>a+b,0) / nRT : NaN;
+          const sdRT = nRT > 1
+            ? Math.sqrt(rtRows.reduce((a,b)=>a + Math.pow(b - meanRT, 2), 0) / (nRT - 1))
+            : NaN;
+
+          // Summary-CSV (eine Zeile pro Person)
+          const header = "participant,trials,accuracy,commissions,omissions,mean_rt_go_correct_ms,sd_rt_go_correct_ms\n";
+          const row = [
+            pid,
+            totalTrials,
+            accuracy.toFixed(4),
+            comm,
+            omissions,
+            Number.isFinite(meanRT) ? meanRT.toFixed(2) : "",
+            Number.isFinite(sdRT) ? sdRT.toFixed(2) : ""
+          ].join(",") + "\n";
+
+          const csv = header + row;
+
+          const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `SART_${pid}_summary.csv`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        });
+      }
+    };
+
+    /***********************
+     * Timeline
+     ***********************/
+    const timeline = [
+      participantForm,
+      setPid,
+      instructions,
+      ...practiceTrials,
+      practiceEnd,
+      ...mainTrials,
+      endScreen
+    ];
+
+    jsPsych.run(timeline);
+  </script>
+</html>
